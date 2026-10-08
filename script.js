@@ -157,7 +157,7 @@ const filmLibrary = [
   let imageChangeInterval = null;
   let isPhoto1Active = true; // 标记当前显示的是哪一张图片
 
-  // 脚本位于页面底部，可在资源加载完成前直接设置随机后的首张图片，避免先闪过固定图片。
+  // HTML 中不预设固定首图；随机图加载完成后再同步显示图片和文字。
   function initializeHeroImage() {
     const heroPhoto1 = document.querySelector('.hero-photo-1');
     const heroPhoto2 = document.querySelector('.hero-photo-2');
@@ -165,20 +165,37 @@ const filmLibrary = [
     const metaBottomCenter = document.querySelector('.meta-bottom-center p');
     const imageData = heroImages[currentImageIndex];
 
-    if (!imageData) return;
+    if (!imageData || !heroPhoto1) return Promise.resolve();
 
-    body.dataset.heroImageIndex = String(currentImageIndex);
-    if (heroPhoto1) {
-      heroPhoto1.src = imageData.src;
-      heroPhoto1.style.opacity = '1';
-    }
-    if (heroPhoto2) heroPhoto2.style.opacity = '0';
+    return new Promise((resolve) => {
+      const preloadImage = new Image();
+      let hasFinished = false;
 
-    if (metaBottomLeft && metaBottomCenter) {
-      const isZh = body.classList.contains('lang-zh');
-      metaBottomLeft.textContent = isZh && imageData.locationZh ? imageData.locationZh : imageData.location;
-      metaBottomCenter.textContent = isZh && imageData.descriptionZh ? imageData.descriptionZh : imageData.description;
-    }
+      const showInitialImage = () => {
+        if (hasFinished) return;
+        hasFinished = true;
+
+        body.dataset.heroImageIndex = String(currentImageIndex);
+        heroPhoto1.src = imageData.src;
+        heroPhoto1.style.opacity = '1';
+        if (heroPhoto2) heroPhoto2.style.opacity = '0';
+
+        if (metaBottomLeft && metaBottomCenter) {
+          const isZh = body.classList.contains('lang-zh');
+          metaBottomLeft.textContent = isZh && imageData.locationZh ? imageData.locationZh : imageData.location;
+          metaBottomCenter.textContent = isZh && imageData.descriptionZh ? imageData.descriptionZh : imageData.description;
+        }
+
+        resolve();
+      };
+
+      preloadImage.addEventListener('load', showInitialImage, { once: true });
+      // 即使图片加载失败也写入真实地址，由浏览器展示其原生的失败状态。
+      preloadImage.addEventListener('error', showInitialImage, { once: true });
+      preloadImage.src = imageData.src;
+
+      if (preloadImage.complete) showInitialImage();
+    });
   }
 
   // 更新首页图片和文字（双图交叉淡化 - 桌面端；单图切换 - 手机端）
@@ -253,10 +270,7 @@ const filmLibrary = [
   }
 
   // 页面加载后启动图片轮播（桌面端和手机端都轮播）
-  initializeHeroImage();
-  window.addEventListener('load', () => {
-    startImageRotation();
-  });
+  initializeHeroImage().then(startImageRotation);
 
   // 如果已经解锁（滚动到下面），可以选择停止轮播
   // 这里我们让它一直轮播，如果你想停止可以取消注释下面的代码
